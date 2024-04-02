@@ -77,4 +77,7 @@
     <remap from="/control/cmd_vel" to="/cmd_vel" />
   </node>
 
+  <node pkg="turtlebot3_autorace_driving" type="control_moving" name="control_moving" output="screen">
+  </node>
+
 </launch>

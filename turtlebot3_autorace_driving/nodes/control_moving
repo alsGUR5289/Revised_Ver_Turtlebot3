@@ -29,11 +29,23 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from turtlebot3_autorace_msgs.msg import MovingParam
+import time
+import matplotlib
+import matplotlib.pyplot as plt 
+matplotlib.use('Agg')
 
 class ControlMoving():
     def __init__(self):
+        self.start_code = rospy.loginfo("Control_moving Start")
+        self.start_code2 = rospy.loginfo("Here~~ is the Control Moooooooving!!")
         self.sub_moving_state = rospy.Subscriber('/control/moving/state', MovingParam, self.get_param, queue_size = 1)
         self.sub_odom = rospy.Subscriber('/odom', Odometry, self.cbOdom, queue_size=1)
+        
+        # Revised by minhyeok
+        self.laser_subscriber = rospy.Subscriber('/scan', LaserScan, self.laser_callback)
+        self.obstacle_distances = []
+        self.timestamps = []
+        self.start_time = time.time()
 
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
         self.pub_max_vel = rospy.Publisher('/control/max_vel', Float64, queue_size = 1)
@@ -58,6 +70,9 @@ class ControlMoving():
         self.is_step_right = False
         self.is_step_forward = False
         self.is_step_backward = False
+        
+        self.detect_obs = 0 
+        
 
         #moving internal valiables
         self.theta = 0.0
@@ -70,10 +85,10 @@ class ControlMoving():
         self.test = math.radians(90)
      
         msg_pub_max_vel = Float64()
-        msg_pub_max_vel.data = 0.05
+        msg_pub_max_vel.data = 0.15
         self.pub_max_vel.publish(msg_pub_max_vel)
 
-        loop_rate = rospy.Rate(100) # 10hz
+        loop_rate = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
             if self.is_step_left == True:
                 self.turn_left(self.moving_msg)
@@ -90,6 +105,7 @@ class ControlMoving():
 
 
     def get_param(self, msg):
+        rospy.loginfo("get_param_called!")
         self.moving_type = msg.moving_type
         self.moving_angluar = msg.moving_value_angular
         self.moving_linear = msg.moving_value_linear
@@ -122,6 +138,7 @@ class ControlMoving():
         
 
     def init_state(self):
+        rospy.loginfo("init_state_called!")
         self.is_step_start = False
         self.is_step_left = False
         self.is_step_right = False
@@ -130,6 +147,7 @@ class ControlMoving():
 
 
     def step_completed(self):
+        rospy.loginfo("step_completed_called!")
         self.is_step_start = False
         self.is_step_left = False
         self.is_step_right = False
@@ -213,9 +231,44 @@ class ControlMoving():
         if math.fabs(error) < 0.005:
             rospy.loginfo("go_backward function is finished")
             self.step_completed()
+            
+    def laser_callback(self, data):
+        # Process LIDAR data to find the closest obstacle in front of the robot
+        rospy.loginfo(len(data.ranges)) # 
+        front_angles = data.ranges[len(data.ranges) // 2 -15 : len(data.ranges) // 2 + 15]
+        closest_distance = min(front_angles)
+        rospy.loginfo("Closest obstacle: {:.2f} meters".format(closest_distance))
+        
+        if closest_distance < 0.5 : 
+            self.detect_obs += 1 
+            if self.detect_obs % 10 == 0 : 
+                rospy.loginfo("Obstacle is detected!!")
 
+        # Record the time and distance
+        current_time = time.time() - self.start_time  # Time since start
+        self.timestamps.append(current_time)
+        self.obstacle_distances.append(closest_distance)
+
+        # Save the graph after collecting data for a certain duration
+        if current_time > 10:  # for example, after 30 seconds
+            self.save_graph()
+            rospy.signal_shutdown("Data collection complete.")  # Shutdown after saving        
+
+    def save_graph(self):
+        plt.figure()
+        plt.plot(self.timestamps, self.obstacle_distances)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Distance to Obstacle (m)')
+        plt.title('Obstacle Distance Over Time')
+        plt.grid(True)
+        try:
+            plt.savefig('/home/min_last/catkin_ws/src/save_fig/obstacle_distance_over_time.png')
+            rospy.loginfo("Graph saved.")
+        except Exception as e:
+            rospy.logerr("Failed to save file: %s", str(e))
 
     def fnTurn(self):
+        rospy.loginfo("fnTurn_called!")
         err_theta = self.current_theta - self.desired_theta
         
         # rospy.loginfo("err_theta  desired_theta  current_theta : %f  %f  %f", err_theta, self.desired_theta, self.current_theta)
@@ -242,7 +295,7 @@ class ControlMoving():
         return err_theta
 
     def fnStraight(self, desired_dist):   
-
+        rospy.loginfo("fnStraight_called!")
         err_pos = math.sqrt((self.current_pos_x - self.start_pos_x) ** 2 + (self.current_pos_y - self.start_pos_y) ** 2) - desired_dist
     
         # rospy.loginfo("error_pos2 = %f", err_pos)
@@ -273,7 +326,7 @@ class ControlMoving():
 
 
     def fnBackStraight(self, desired_dist):   
-
+        rospy.loginfo("fnBackStraight_called!")
         err_pos = math.sqrt((self.current_pos_x - self.start_pos_x) ** 2 + (self.current_pos_y - self.start_pos_y) ** 2) - desired_dist
     
         # rospy.loginfo("error_pos = %f", err_pos)
@@ -289,9 +342,9 @@ class ControlMoving():
         twist = Twist()
       
         if err_pos < 0:
-            twist.linear.x = -0.1 #0.07
+            twist.linear.x = -0.07 #0.07
         else:
-            twist.linear.x = 0.1
+            twist.linear.x = 0.15
 
         twist.linear.y = 0
         twist.linear.z = 0
@@ -303,6 +356,7 @@ class ControlMoving():
         return err_pos
 
     def fnStop(self):
+        rospy.loginfo("fnStop_called!")
         twist = Twist()
         twist.linear.x = 0
         twist.linear.y = 0
@@ -314,6 +368,7 @@ class ControlMoving():
 
     
     def cbOdom(self, odom_msg):
+        # rospy.loginfo("cbOdom_called!")
         quaternion = (odom_msg.pose.pose.orientation.x, odom_msg.pose.pose.orientation.y, odom_msg.pose.pose.orientation.z, odom_msg.pose.pose.orientation.w)
         self.current_theta = self.euler_from_quaternion(quaternion)
 

@@ -33,7 +33,7 @@ class ControlLane():
     def __init__(self):
         self.sub_scan_obstacle = rospy.Subscriber('/detect/scan', LaserScan, self.cbScanObstacle, queue_size=1)
         self.sub_lane = rospy.Subscriber('/control/lane', Float64, self.cbFollowLane, queue_size = 1)
-        self.sub_max_vel = rospy.Subscriber('/control/max_vel', Bool, self.cbGetMaxVel, queue_size = 1)
+        self.sub_max_vel = rospy.Subscriber('/control/max_vel', Float64, self.cbGetMaxVel, queue_size = 1)
         self.sub_is_reverse = rospy.Subscriber('/control/is_reverse', Bool, self.cbIsReverse, queue_size = 1)
         self.sub_is_stop = rospy.Subscriber('/control/is_stop', Bool, self.cbIsStop, queue_size = 1)
         self.sub_rotate_180 = rospy.Subscriber('/control/rotate_180', Bool, self.cbRotate180, queue_size = 1)
